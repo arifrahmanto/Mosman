@@ -34,6 +34,8 @@ This change encompasses three primary capabilities:
 
 1. **API Server Setup** - Express.js server with middleware, routing, and error handling
 2. **Database Schema** - Supabase tables, relationships, Row Level Security (RLS) policies
+   - Line item architecture: Separate `donation_items` and `expense_items` tables for flexible category allocation
+   - Allows splitting single transactions across multiple categories
 3. **Authentication System** - Supabase Auth integration with role-based access control
 
 ## Success Criteria

@@ -105,7 +105,7 @@ router.get(
  * /v1/expenses:
  *   post:
  *     summary: Create Expense
- *     description: Create a new expense record (Admin and Treasurer only). Status defaults to 'pending'
+ *     description: Create a new expense record with line items (Admin and Treasurer only). Status defaults to 'pending'
  *     tags: [Expenses]
  *     security:
  *       - bearerAuth: []
@@ -117,11 +117,19 @@ router.get(
  *             $ref: '#/components/schemas/CreateExpense'
  *           example:
  *             pocket_id: "11111111-1111-1111-1111-111111111111"
- *             category_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
- *             description: "Pembelian sound system untuk masjid"
- *             amount: 5000000
+ *             description: "Biaya operasional masjid bulan Januari"
  *             expense_date: "2026-01-18"
- *             notes: "Untuk keperluan kajian rutin"
+ *             notes: "Pengeluaran untuk operasional rutin"
+ *             items:
+ *               - category_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+ *                 amount: 500000
+ *                 description: "Tagihan listrik"
+ *               - category_id: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+ *                 amount: 300000
+ *                 description: "Tagihan air"
+ *               - category_id: "gggggggg-gggg-gggg-gggg-gggggggggggg"
+ *                 amount: 200000
+ *                 description: "Perlengkapan kebersihan"
  *     responses:
  *       201:
  *         description: Expense created successfully
@@ -134,6 +142,48 @@ router.get(
  *                   properties:
  *                     data:
  *                       $ref: '#/components/schemas/Expense'
+ *             example:
+ *               success: true
+ *               data:
+ *                 id: "88888888-8888-8888-8888-888888888888"
+ *                 pocket_id: "11111111-1111-1111-1111-111111111111"
+ *                 pocket_name: "Kas Masjid"
+ *                 description: "Biaya operasional masjid bulan Januari"
+ *                 expense_date: "2026-01-18"
+ *                 status: "pending"
+ *                 total_amount: 1000000
+ *                 items:
+ *                   - id: "item-5555-5555-5555-555555555555"
+ *                     expense_id: "88888888-8888-8888-8888-888888888888"
+ *                     category_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+ *                     category_name: "Utilitas"
+ *                     amount: 500000
+ *                     description: "Tagihan listrik"
+ *                     created_at: "2026-01-18T10:00:00Z"
+ *                     updated_at: "2026-01-18T10:00:00Z"
+ *                   - id: "item-6666-6666-6666-666666666666"
+ *                     expense_id: "88888888-8888-8888-8888-888888888888"
+ *                     category_id: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+ *                     category_name: "Utilitas"
+ *                     amount: 300000
+ *                     description: "Tagihan air"
+ *                     created_at: "2026-01-18T10:00:00Z"
+ *                     updated_at: "2026-01-18T10:00:00Z"
+ *                   - id: "item-7777-7777-7777-777777777777"
+ *                     expense_id: "88888888-8888-8888-8888-888888888888"
+ *                     category_id: "gggggggg-gggg-gggg-gggg-gggggggggggg"
+ *                     category_name: "Perlengkapan"
+ *                     amount: 200000
+ *                     description: "Perlengkapan kebersihan"
+ *                     created_at: "2026-01-18T10:00:00Z"
+ *                     updated_at: "2026-01-18T10:00:00Z"
+ *                 notes: "Pengeluaran untuk operasional rutin"
+ *                 approved_by: null
+ *                 recorded_by: "user-uuid"
+ *                 receipt_url: null
+ *                 created_at: "2026-01-18T10:00:00Z"
+ *                 updated_at: "2026-01-18T10:00:00Z"
+ *               message: "Expense created successfully"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
  *       401:
@@ -153,7 +203,7 @@ router.post(
  * /v1/expenses/{id}:
  *   put:
  *     summary: Update Expense
- *     description: Update an existing expense record (Admin and Treasurer only)
+ *     description: Update an existing expense record with optional line items replacement (Admin and Treasurer only)
  *     tags: [Expenses]
  *     security:
  *       - bearerAuth: []
@@ -164,30 +214,25 @@ router.post(
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               pocket_id:
- *                 type: string
- *                 format: uuid
- *               category_id:
- *                 type: string
- *                 format: uuid
- *               description:
- *                 type: string
- *               amount:
- *                 type: number
- *                 minimum: 0.01
- *               receipt_url:
- *                 type: string
- *                 format: uri
- *               expense_date:
- *                 type: string
- *                 format: date
- *               notes:
- *                 type: string
- *           example:
- *             description: "Updated description"
- *             amount: 5500000
+ *             $ref: '#/components/schemas/UpdateExpense'
+ *           examples:
+ *             updateBasicInfo:
+ *               summary: Update basic information only
+ *               value:
+ *                 description: "Biaya operasional masjid bulan Januari (Updated)"
+ *                 notes: "Catatan diperbarui"
+ *             updateWithItems:
+ *               summary: Update with new line items
+ *               value:
+ *                 description: "Biaya renovasi masjid"
+ *                 notes: "Perubahan kategori pengeluaran"
+ *                 items:
+ *                   - category_id: "hhhhhhhh-hhhh-hhhh-hhhh-hhhhhhhhhhhh"
+ *                     amount: 3000000
+ *                     description: "Material bangunan"
+ *                   - category_id: "iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii"
+ *                     amount: 2000000
+ *                     description: "Upah tukang"
  *     responses:
  *       200:
  *         description: Expense updated successfully
@@ -200,6 +245,40 @@ router.post(
  *                   properties:
  *                     data:
  *                       $ref: '#/components/schemas/Expense'
+ *             example:
+ *               success: true
+ *               data:
+ *                 id: "88888888-8888-8888-8888-888888888888"
+ *                 pocket_id: "11111111-1111-1111-1111-111111111111"
+ *                 pocket_name: "Kas Masjid"
+ *                 description: "Biaya renovasi masjid"
+ *                 expense_date: "2026-01-18"
+ *                 status: "pending"
+ *                 total_amount: 5000000
+ *                 items:
+ *                   - id: "item-8888-8888-8888-888888888888"
+ *                     expense_id: "88888888-8888-8888-8888-888888888888"
+ *                     category_id: "hhhhhhhh-hhhh-hhhh-hhhh-hhhhhhhhhhhh"
+ *                     category_name: "Renovasi"
+ *                     amount: 3000000
+ *                     description: "Material bangunan"
+ *                     created_at: "2026-01-18T11:00:00Z"
+ *                     updated_at: "2026-01-18T11:00:00Z"
+ *                   - id: "item-9999-9999-9999-999999999999"
+ *                     expense_id: "88888888-8888-8888-8888-888888888888"
+ *                     category_id: "iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii"
+ *                     category_name: "Tenaga Kerja"
+ *                     amount: 2000000
+ *                     description: "Upah tukang"
+ *                     created_at: "2026-01-18T11:00:00Z"
+ *                     updated_at: "2026-01-18T11:00:00Z"
+ *                 notes: "Perubahan kategori pengeluaran"
+ *                 approved_by: null
+ *                 recorded_by: "user-uuid"
+ *                 receipt_url: null
+ *                 created_at: "2026-01-18T10:00:00Z"
+ *                 updated_at: "2026-01-18T11:00:00Z"
+ *               message: "Expense updated successfully"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
  *       401:
@@ -233,15 +312,16 @@ router.put(
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [status]
- *             properties:
- *               status:
- *                 type: string
- *                 enum: [approved, rejected]
- *                 description: New approval status
- *           example:
- *             status: "approved"
+ *             $ref: '#/components/schemas/ApproveExpense'
+ *           examples:
+ *             approve:
+ *               summary: Approve expense
+ *               value:
+ *                 status: "approved"
+ *             reject:
+ *               summary: Reject expense
+ *               value:
+ *                 status: "rejected"
  *     responses:
  *       200:
  *         description: Expense status updated successfully
@@ -254,6 +334,48 @@ router.put(
  *                   properties:
  *                     data:
  *                       $ref: '#/components/schemas/Expense'
+ *             example:
+ *               success: true
+ *               data:
+ *                 id: "88888888-8888-8888-8888-888888888888"
+ *                 pocket_id: "11111111-1111-1111-1111-111111111111"
+ *                 pocket_name: "Kas Masjid"
+ *                 description: "Biaya operasional masjid bulan Januari"
+ *                 expense_date: "2026-01-18"
+ *                 status: "approved"
+ *                 total_amount: 1000000
+ *                 items:
+ *                   - id: "item-5555-5555-5555-555555555555"
+ *                     expense_id: "88888888-8888-8888-8888-888888888888"
+ *                     category_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+ *                     category_name: "Utilitas"
+ *                     amount: 500000
+ *                     description: "Tagihan listrik"
+ *                     created_at: "2026-01-18T10:00:00Z"
+ *                     updated_at: "2026-01-18T10:00:00Z"
+ *                   - id: "item-6666-6666-6666-666666666666"
+ *                     expense_id: "88888888-8888-8888-8888-888888888888"
+ *                     category_id: "ffffffff-ffff-ffff-ffff-ffffffffffff"
+ *                     category_name: "Utilitas"
+ *                     amount: 300000
+ *                     description: "Tagihan air"
+ *                     created_at: "2026-01-18T10:00:00Z"
+ *                     updated_at: "2026-01-18T10:00:00Z"
+ *                   - id: "item-7777-7777-7777-777777777777"
+ *                     expense_id: "88888888-8888-8888-8888-888888888888"
+ *                     category_id: "gggggggg-gggg-gggg-gggg-gggggggggggg"
+ *                     category_name: "Perlengkapan"
+ *                     amount: 200000
+ *                     description: "Perlengkapan kebersihan"
+ *                     created_at: "2026-01-18T10:00:00Z"
+ *                     updated_at: "2026-01-18T10:00:00Z"
+ *                 notes: "Pengeluaran untuk operasional rutin"
+ *                 approved_by: "admin-uuid"
+ *                 recorded_by: "user-uuid"
+ *                 receipt_url: null
+ *                 created_at: "2026-01-18T10:00:00Z"
+ *                 updated_at: "2026-01-18T12:00:00Z"
+ *               message: "Expense approved successfully"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
  *       401:

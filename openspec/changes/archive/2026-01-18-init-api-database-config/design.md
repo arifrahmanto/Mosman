@@ -128,9 +128,7 @@ mosman/
 ```sql
 - id (uuid, PK)
 - pocket_id (uuid, FK -> pockets, required)
-- category_id (uuid, FK -> donation_categories)
 - donor_name (varchar, nullable for anonymous)
-- amount (numeric(15,2))
 - is_anonymous (boolean)
 - payment_method (varchar) - e.g., "cash", "transfer", "qris"
 - receipt_url (text, nullable)
@@ -140,6 +138,19 @@ mosman/
 - created_at (timestamp)
 - updated_at (timestamp)
 ```
+
+#### 4a. donation_items
+```sql
+- id (uuid, PK)
+- donation_id (uuid, FK -> donations, ON DELETE CASCADE)
+- category_id (uuid, FK -> donation_categories)
+- amount (numeric(15,2))
+- description (text, nullable)
+- created_at (timestamp)
+- updated_at (timestamp)
+```
+
+**Rationale**: Separating donation items allows a single donation to be split across multiple categories. For example, a 100,000 donation can be allocated as 70,000 for "Infaq Umum" and 30,000 for "Zakat". The total donation amount is calculated by summing all items.
 
 #### 5. expense_categories
 ```sql
@@ -155,9 +166,7 @@ mosman/
 ```sql
 - id (uuid, PK)
 - pocket_id (uuid, FK -> pockets, required)
-- category_id (uuid, FK -> expense_categories)
 - description (text)
-- amount (numeric(15,2))
 - receipt_url (text, nullable)
 - expense_date (date)
 - approved_by (uuid, FK -> auth.users, nullable)
@@ -167,6 +176,19 @@ mosman/
 - created_at (timestamp)
 - updated_at (timestamp)
 ```
+
+#### 6a. expense_items
+```sql
+- id (uuid, PK)
+- expense_id (uuid, FK -> expenses, ON DELETE CASCADE)
+- category_id (uuid, FK -> expense_categories)
+- amount (numeric(15,2))
+- description (text, nullable)
+- created_at (timestamp)
+- updated_at (timestamp)
+```
+
+**Rationale**: Separating expense items allows a single expense transaction to be split across multiple categories. For example, a 500,000 expense can be allocated as 300,000 for "Operasional" and 200,000 for "Pemeliharaan". The total expense amount is calculated by summing all items.
 
 #### 7. user_profiles
 ```sql
@@ -191,17 +213,29 @@ mosman/
    - UPDATE: Only admin and treasurer roles
    - DELETE: Only admin role
 
-3. **Expenses Table**
+3. **Donation Items Table**
+   - SELECT: All authenticated users can read
+   - INSERT: Only admin and treasurer roles (same as parent donation)
+   - UPDATE: Only admin and treasurer roles (same as parent donation)
+   - DELETE: CASCADE on parent donation delete
+
+4. **Expenses Table**
    - SELECT: All authenticated users can read
    - INSERT: Only admin and treasurer roles
    - UPDATE: Only admin role (for approval)
    - DELETE: Only admin role
 
-4. **Categories Tables**
+5. **Expense Items Table**
+   - SELECT: All authenticated users can read
+   - INSERT: Only admin and treasurer roles (same as parent expense)
+   - UPDATE: Only admin role (same as parent expense)
+   - DELETE: CASCADE on parent expense delete
+
+6. **Categories Tables**
    - SELECT: All authenticated users can read
    - INSERT/UPDATE/DELETE: Only admin role
 
-5. **User Profiles**
+7. **User Profiles**
    - SELECT: All authenticated users can read their own profile
    - UPDATE: Only admin can update user profiles
 
@@ -286,6 +320,127 @@ GET    /api/v1/categories/expenses         # List expense categories
     "total": 150,
     "totalPages": 8
   }
+}
+```
+
+### Example API Requests with Line Items
+
+#### Create Donation Request
+```json
+POST /api/v1/donations
+{
+  "pocket_id": "11111111-1111-1111-1111-111111111111",
+  "donor_name": "Ahmad Yusuf",
+  "is_anonymous": false,
+  "payment_method": "transfer",
+  "donation_date": "2026-01-18",
+  "notes": "Donasi dari hasil usaha",
+  "items": [
+    {
+      "category_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "amount": 700000,
+      "description": "Infaq Umum"
+    },
+    {
+      "category_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "amount": 300000,
+      "description": "Zakat Mal"
+    }
+  ]
+}
+```
+
+#### Create Donation Response
+```json
+{
+  "success": true,
+  "data": {
+    "id": "12345678-1234-1234-1234-123456789012",
+    "pocket_id": "11111111-1111-1111-1111-111111111111",
+    "pocket_name": "Kas Umum",
+    "donor_name": "Ahmad Yusuf",
+    "is_anonymous": false,
+    "payment_method": "transfer",
+    "donation_date": "2026-01-18",
+    "total_amount": 1000000,
+    "items": [
+      {
+        "id": "item-111",
+        "category_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "category_name": "Infaq Umum",
+        "amount": 700000,
+        "description": "Infaq Umum"
+      },
+      {
+        "id": "item-222",
+        "category_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "category_name": "Zakat",
+        "amount": 300000,
+        "description": "Zakat Mal"
+      }
+    ],
+    "created_at": "2026-01-18T10:30:00Z"
+  },
+  "message": "Donation created successfully"
+}
+```
+
+#### Create Expense Request
+```json
+POST /api/v1/expenses
+{
+  "pocket_id": "11111111-1111-1111-1111-111111111111",
+  "description": "Pembelian peralatan masjid dan honor pengurus",
+  "expense_date": "2026-01-18",
+  "receipt_url": "https://example.com/receipt.pdf",
+  "notes": "Pembayaran bulan Januari",
+  "items": [
+    {
+      "category_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "amount": 3000000,
+      "description": "Operasional - Listrik dan air"
+    },
+    {
+      "category_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "amount": 2000000,
+      "description": "Pemeliharaan - Cat dan perbaikan"
+    }
+  ]
+}
+```
+
+#### Create Expense Response
+```json
+{
+  "success": true,
+  "data": {
+    "id": "87654321-4321-4321-4321-210987654321",
+    "pocket_id": "11111111-1111-1111-1111-111111111111",
+    "pocket_name": "Kas Umum",
+    "description": "Pembelian peralatan masjid dan honor pengurus",
+    "expense_date": "2026-01-18",
+    "status": "pending",
+    "total_amount": 5000000,
+    "items": [
+      {
+        "id": "item-333",
+        "category_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "category_name": "Operasional",
+        "amount": 3000000,
+        "description": "Operasional - Listrik dan air"
+      },
+      {
+        "id": "item-444",
+        "category_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "category_name": "Pemeliharaan",
+        "amount": 2000000,
+        "description": "Pemeliharaan - Cat dan perbaikan"
+      }
+    ],
+    "approved_by": null,
+    "created_at": "2026-01-18T14:15:00Z"
+  },
+  "message": "Expense created successfully"
 }
 ```
 
@@ -389,21 +544,116 @@ export interface Database {
       donations: {
         Row: {
           id: string
-          category_id: string
+          pocket_id: string
           donor_name: string | null
-          amount: number
           is_anonymous: boolean
-          // ... other fields
+          payment_method: string
+          receipt_url: string | null
+          notes: string | null
+          donation_date: string
+          recorded_by: string
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
-          category_id: string
-          // ... other fields
+          pocket_id: string
+          donor_name?: string | null
+          is_anonymous: boolean
+          payment_method: string
+          receipt_url?: string | null
+          notes?: string | null
+          donation_date: string
+          recorded_by: string
         }
         Update: {
+          pocket_id?: string
+          donor_name?: string | null
+          is_anonymous?: boolean
+          payment_method?: string
+          receipt_url?: string | null
+          notes?: string | null
+          donation_date?: string
+        }
+      }
+      donation_items: {
+        Row: {
+          id: string
+          donation_id: string
+          category_id: string
+          amount: number
+          description: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
           id?: string
+          donation_id: string
+          category_id: string
+          amount: number
+          description?: string | null
+        }
+        Update: {
           category_id?: string
-          // ... other fields
+          amount?: number
+          description?: string | null
+        }
+      }
+      expenses: {
+        Row: {
+          id: string
+          pocket_id: string
+          description: string
+          receipt_url: string | null
+          expense_date: string
+          approved_by: string | null
+          recorded_by: string
+          status: string
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          pocket_id: string
+          description: string
+          receipt_url?: string | null
+          expense_date: string
+          recorded_by: string
+          status?: string
+          notes?: string | null
+        }
+        Update: {
+          pocket_id?: string
+          description?: string
+          receipt_url?: string | null
+          expense_date?: string
+          approved_by?: string | null
+          status?: string
+          notes?: string | null
+        }
+      }
+      expense_items: {
+        Row: {
+          id: string
+          expense_id: string
+          category_id: string
+          amount: number
+          description: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          expense_id: string
+          category_id: string
+          amount: number
+          description?: string | null
+        }
+        Update: {
+          category_id?: string
+          amount?: number
+          description?: string | null
         }
       }
       // ... other tables
@@ -440,25 +690,76 @@ export interface PaginatedResponse<T> {
   }
 }
 
-export interface CreateDonationRequest {
+export interface DonationItem {
   category_id: string
-  donor_name?: string
   amount: number
+  description?: string
+}
+
+export interface DonationItemResponse {
+  id: string
+  category_id: string
+  category_name: string
+  amount: number
+  description: string | null
+}
+
+export interface CreateDonationRequest {
+  pocket_id: string
+  donor_name?: string
   is_anonymous: boolean
   payment_method: string
   notes?: string
   donation_date: string
+  items: DonationItem[]  // Array of donation items with category and amount
 }
 
 export interface DonationResponse {
   id: string
-  category_id: string
-  category_name: string
+  pocket_id: string
+  pocket_name: string
   donor_name: string | null
-  amount: number
   is_anonymous: boolean
   payment_method: string
   donation_date: string
+  total_amount: number  // Sum of all items
+  items: DonationItemResponse[]
+  created_at: string
+}
+
+export interface ExpenseItem {
+  category_id: string
+  amount: number
+  description?: string
+}
+
+export interface ExpenseItemResponse {
+  id: string
+  category_id: string
+  category_name: string
+  amount: number
+  description: string | null
+}
+
+export interface CreateExpenseRequest {
+  pocket_id: string
+  description: string
+  expense_date: string
+  receipt_url?: string
+  notes?: string
+  items: ExpenseItem[]  // Array of expense items with category and amount
+}
+
+export interface ExpenseResponse {
+  id: string
+  pocket_id: string
+  pocket_name: string
+  description: string
+  expense_date: string
+  status: string
+  total_amount: number  // Sum of all items
+  items: ExpenseItemResponse[]
+  approved_by: string | null
   created_at: string
 }
 ```
@@ -526,17 +827,41 @@ Zod schemas for runtime validation:
 // validators/donation.schema.ts
 import { z } from 'zod'
 
+export const donationItemSchema = z.object({
+  category_id: z.string().uuid('Category ID must be a valid UUID'),
+  amount: z.number().positive('Amount must be greater than 0'),
+  description: z.string().max(500).optional(),
+})
+
 export const createDonationSchema = z.object({
-  category_id: z.string().uuid(),
-  donor_name: z.string().optional(),
-  amount: z.number().positive(),
+  pocket_id: z.string().uuid('Pocket ID must be a valid UUID'),
+  donor_name: z.string().min(1).max(255).optional(),
   is_anonymous: z.boolean(),
   payment_method: z.enum(['cash', 'transfer', 'qris']),
-  notes: z.string().optional(),
-  donation_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+  notes: z.string().max(1000).optional(),
+  donation_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  items: z.array(donationItemSchema).min(1, 'At least one item is required'),
 })
 
 export type CreateDonationInput = z.infer<typeof createDonationSchema>
+
+// validators/expense.schema.ts
+export const expenseItemSchema = z.object({
+  category_id: z.string().uuid('Category ID must be a valid UUID'),
+  amount: z.number().positive('Amount must be greater than 0'),
+  description: z.string().max(500).optional(),
+})
+
+export const createExpenseSchema = z.object({
+  pocket_id: z.string().uuid('Pocket ID must be a valid UUID'),
+  description: z.string().min(1, 'Description is required'),
+  expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  receipt_url: z.string().url('Receipt URL must be a valid URL').optional(),
+  notes: z.string().max(1000).optional(),
+  items: z.array(expenseItemSchema).min(1, 'At least one item is required'),
+})
+
+export type CreateExpenseInput = z.infer<typeof createExpenseSchema>
 ```
 
 ### TypeScript Build Process
@@ -603,7 +928,27 @@ RATE_LIMIT_MAX_REQUESTS=100
 
 **Trade-off:** Slightly more initial setup, but long-term benefits outweigh costs
 
-### Decision 4: Migration Tool
+### Decision 4: Line Items for Donations and Expenses
+**Chosen:** Separate `donation_items` and `expense_items` tables
+**Rationale:**
+- **Flexibility**: Allows a single transaction to be split across multiple categories
+  - Example: A 100,000 donation can be allocated as 70,000 for "Infaq Umum" and 30,000 for "Zakat"
+  - Example: A 500,000 expense can be split as 300,000 for "Operasional" and 200,000 for "Pemeliharaan"
+- **Accuracy**: More accurately reflects real-world accounting where transactions often span multiple categories
+- **Reporting**: Easier to generate category-wise reports by querying items directly
+- **Audit Trail**: Individual line items can have their own descriptions and tracking
+- **Data Integrity**: Total amounts are calculated from items, ensuring consistency
+
+**Trade-off:**
+- Slightly more complex data model and API structure
+- Requires nested transaction handling (parent record + child items)
+- Additional validation needed to ensure at least one item exists per transaction
+
+**Alternative Considered:** Single category per transaction
+- Rejected because it would require creating multiple transactions for split allocations
+- Would make reporting more complex as related transactions need manual grouping
+
+### Decision 5: Migration Tool
 **Chosen:** Plain SQL migration files + Supabase CLI
 **Rationale:**
 - Simple and transparent
@@ -613,10 +958,29 @@ RATE_LIMIT_MAX_REQUESTS=100
 
 ## Performance Considerations
 
-1. **Database Indexing**: Create indexes on frequently queried columns (category_id, donation_date, expense_date)
-2. **Pagination**: Implement cursor-based pagination for large datasets
-3. **Caching**: Consider Redis for frequently accessed data in future
-4. **Connection Pooling**: Supabase handles this automatically
+1. **Database Indexing**: Create indexes on frequently queried columns
+   - `donations`: `pocket_id`, `donation_date`, `recorded_by`
+   - `donation_items`: `donation_id` (FK), `category_id`, composite index on `(donation_id, category_id)`
+   - `expenses`: `pocket_id`, `expense_date`, `status`, `recorded_by`
+   - `expense_items`: `expense_id` (FK), `category_id`, composite index on `(expense_id, category_id)`
+   - Category tables: `is_active` for filtering
+   - Pockets: `is_active` for filtering
+
+2. **Query Optimization**:
+   - Use JOINs to fetch donations/expenses with their items in a single query
+   - Avoid N+1 queries by using Supabase's foreign table syntax or explicit joins
+   - Calculate total amounts in database using SUM aggregation where possible
+
+3. **Pagination**: Implement cursor-based pagination for large datasets
+
+4. **Caching**: Consider Redis for frequently accessed data in future
+   - Category lists (rarely change)
+   - Pocket lists and balances
+   - User profiles and permissions
+
+5. **Connection Pooling**: Supabase handles this automatically
+
+6. **Transaction Handling**: Use database transactions when creating/updating parent records with items to maintain data integrity
 
 ## Future Extensions
 

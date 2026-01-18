@@ -103,7 +103,7 @@ router.get(
  * /v1/donations:
  *   post:
  *     summary: Create Donation
- *     description: Create a new donation record (Admin and Treasurer only)
+ *     description: Create a new donation record with line items (Admin and Treasurer only)
  *     tags: [Donations]
  *     security:
  *       - bearerAuth: []
@@ -115,13 +115,18 @@ router.get(
  *             $ref: '#/components/schemas/CreateDonation'
  *           example:
  *             pocket_id: "11111111-1111-1111-1111-111111111111"
- *             category_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
  *             donor_name: "Ahmad Yusuf"
- *             amount: 500000
  *             is_anonymous: false
  *             payment_method: "transfer"
  *             donation_date: "2026-01-18"
- *             notes: "Infaq Jumat"
+ *             notes: "Donasi dari Ahmad Yusuf"
+ *             items:
+ *               - category_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+ *                 amount: 300000
+ *                 description: "Zakat Fitrah"
+ *               - category_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+ *                 amount: 200000
+ *                 description: "Infaq Masjid"
  *     responses:
  *       201:
  *         description: Donation created successfully
@@ -134,6 +139,39 @@ router.get(
  *                   properties:
  *                     data:
  *                       $ref: '#/components/schemas/Donation'
+ *             example:
+ *               success: true
+ *               data:
+ *                 id: "99999999-9999-9999-9999-999999999999"
+ *                 pocket_id: "11111111-1111-1111-1111-111111111111"
+ *                 pocket_name: "Kas Masjid"
+ *                 donor_name: "Ahmad Yusuf"
+ *                 is_anonymous: false
+ *                 payment_method: "transfer"
+ *                 donation_date: "2026-01-18"
+ *                 total_amount: 500000
+ *                 items:
+ *                   - id: "item-1111-1111-1111-111111111111"
+ *                     donation_id: "99999999-9999-9999-9999-999999999999"
+ *                     category_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+ *                     category_name: "Zakat"
+ *                     amount: 300000
+ *                     description: "Zakat Fitrah"
+ *                     created_at: "2026-01-18T10:00:00Z"
+ *                     updated_at: "2026-01-18T10:00:00Z"
+ *                   - id: "item-2222-2222-2222-222222222222"
+ *                     donation_id: "99999999-9999-9999-9999-999999999999"
+ *                     category_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+ *                     category_name: "Infaq"
+ *                     amount: 200000
+ *                     description: "Infaq Masjid"
+ *                     created_at: "2026-01-18T10:00:00Z"
+ *                     updated_at: "2026-01-18T10:00:00Z"
+ *                 notes: "Donasi dari Ahmad Yusuf"
+ *                 recorded_by: "user-uuid"
+ *                 created_at: "2026-01-18T10:00:00Z"
+ *                 updated_at: "2026-01-18T10:00:00Z"
+ *               message: "Donation created successfully"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
  *       401:
@@ -153,7 +191,7 @@ router.post(
  * /v1/donations/{id}:
  *   put:
  *     summary: Update Donation
- *     description: Update an existing donation record (Admin and Treasurer only)
+ *     description: Update an existing donation record with optional line items replacement (Admin and Treasurer only)
  *     tags: [Donations]
  *     security:
  *       - bearerAuth: []
@@ -164,35 +202,25 @@ router.post(
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               pocket_id:
- *                 type: string
- *                 format: uuid
- *               category_id:
- *                 type: string
- *                 format: uuid
- *               donor_name:
- *                 type: string
- *               amount:
- *                 type: number
- *                 minimum: 0.01
- *               is_anonymous:
- *                 type: boolean
- *               payment_method:
- *                 type: string
- *                 enum: [cash, transfer, qris]
- *               receipt_url:
- *                 type: string
- *                 format: uri
- *               notes:
- *                 type: string
- *               donation_date:
- *                 type: string
- *                 format: date
- *           example:
- *             amount: 750000
- *             notes: "Updated amount"
+ *             $ref: '#/components/schemas/UpdateDonation'
+ *           examples:
+ *             updateBasicInfo:
+ *               summary: Update basic information only
+ *               value:
+ *                 donor_name: "Ahmad Yusuf (Updated)"
+ *                 notes: "Updated donor information"
+ *             updateWithItems:
+ *               summary: Update with new line items
+ *               value:
+ *                 donor_name: "Ahmad Yusuf"
+ *                 notes: "Updated donation with new items"
+ *                 items:
+ *                   - category_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+ *                     amount: 400000
+ *                     description: "Zakat Mal"
+ *                   - category_id: "cccccccc-cccc-cccc-cccc-cccccccccccc"
+ *                     amount: 100000
+ *                     description: "Sedekah"
  *     responses:
  *       200:
  *         description: Donation updated successfully
@@ -205,6 +233,39 @@ router.post(
  *                   properties:
  *                     data:
  *                       $ref: '#/components/schemas/Donation'
+ *             example:
+ *               success: true
+ *               data:
+ *                 id: "99999999-9999-9999-9999-999999999999"
+ *                 pocket_id: "11111111-1111-1111-1111-111111111111"
+ *                 pocket_name: "Kas Masjid"
+ *                 donor_name: "Ahmad Yusuf"
+ *                 is_anonymous: false
+ *                 payment_method: "transfer"
+ *                 donation_date: "2026-01-18"
+ *                 total_amount: 500000
+ *                 items:
+ *                   - id: "item-3333-3333-3333-333333333333"
+ *                     donation_id: "99999999-9999-9999-9999-999999999999"
+ *                     category_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+ *                     category_name: "Zakat"
+ *                     amount: 400000
+ *                     description: "Zakat Mal"
+ *                     created_at: "2026-01-18T11:00:00Z"
+ *                     updated_at: "2026-01-18T11:00:00Z"
+ *                   - id: "item-4444-4444-4444-444444444444"
+ *                     donation_id: "99999999-9999-9999-9999-999999999999"
+ *                     category_id: "cccccccc-cccc-cccc-cccc-cccccccccccc"
+ *                     category_name: "Sedekah"
+ *                     amount: 100000
+ *                     description: "Sedekah"
+ *                     created_at: "2026-01-18T11:00:00Z"
+ *                     updated_at: "2026-01-18T11:00:00Z"
+ *                 notes: "Updated donation with new items"
+ *                 recorded_by: "user-uuid"
+ *                 created_at: "2026-01-18T10:00:00Z"
+ *                 updated_at: "2026-01-18T11:00:00Z"
+ *               message: "Donation updated successfully"
  *       400:
  *         $ref: '#/components/responses/ValidationError'
  *       401:

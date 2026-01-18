@@ -1,6 +1,6 @@
 /**
  * Expense Service Layer
- * Business logic for expense operations
+ * Business logic for expense operations with line items support
  */
 
 import { supabase } from '../config/supabase';
@@ -9,7 +9,8 @@ import {
   UpdateExpenseRequest,
   ExpenseResponse,
   ExpenseFilters,
-  ExpenseStatus
+  ExpenseStatus,
+  ExpenseItemResponse
 } from '../types/expense.types';
 import { PaginatedResponse, Pagination } from '../types';
 import { DatabaseError, NotFoundError, ValidationError } from '../middleware/errorHandler';
@@ -25,21 +26,17 @@ export async function getExpenses(
     const pageSize = filters.page_size || 20;
     const offset = (page - 1) * pageSize;
 
-    // Build query
+    // Build query for expenses
     let query = supabase
       .from('expenses')
       .select(`
         *,
-        pocket:pockets(id, name),
-        category:expense_categories(id, name)
+        pocket:pockets(id, name)
       `, { count: 'exact' });
 
     // Apply filters
     if (filters.pocket_id) {
       query = query.eq('pocket_id', filters.pocket_id);
-    }
-    if (filters.category_id) {
-      query = query.eq('category_id', filters.category_id);
     }
     if (filters.status) {
       query = query.eq('status', filters.status);
@@ -57,30 +54,81 @@ export async function getExpenses(
       .order('created_at', { ascending: false })
       .range(offset, offset + pageSize - 1);
 
-    const { data, error, count } = await query;
+    const { data: expenses, error, count } = await query;
 
     if (error) {
       throw new DatabaseError('Failed to fetch expenses', { error: error.message });
     }
 
+    // Fetch items for all expenses
+    const expenseIds = (expenses || []).map((e: any) => e.id);
+
+    let itemsQuery = supabase
+      .from('expense_items')
+      .select(`
+        *,
+        category:expense_categories(id, name)
+      `)
+      .in('expense_id', expenseIds);
+
+    // Filter by category_id if provided
+    if (filters.category_id) {
+      itemsQuery = itemsQuery.eq('category_id', filters.category_id);
+    }
+
+    const { data: items, error: itemsError } = await itemsQuery;
+
+    if (itemsError) {
+      throw new DatabaseError('Failed to fetch expense items', { error: itemsError.message });
+    }
+
+    // Group items by expense_id
+    const itemsByExpense = (items || []).reduce((acc: any, item: any) => {
+      if (!acc[item.expense_id]) {
+        acc[item.expense_id] = [];
+      }
+      acc[item.expense_id].push({
+        id: item.id,
+        expense_id: item.expense_id,
+        category_id: item.category_id,
+        category_name: item.category?.name || 'Unknown',
+        amount: Number(item.amount),
+        description: item.description,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      });
+      return acc;
+    }, {});
+
     // Map to response format
-    const expenses: ExpenseResponse[] = (data || []).map((expense: any) => ({
-      id: expense.id,
-      pocket_id: expense.pocket_id,
-      pocket_name: expense.pocket?.name || 'Unknown',
-      category_id: expense.category_id,
-      category_name: expense.category?.name || 'Unknown',
-      description: expense.description,
-      amount: Number(expense.amount),
-      receipt_url: expense.receipt_url,
-      expense_date: expense.expense_date,
-      status: expense.status as ExpenseStatus,
-      approved_by: expense.approved_by,
-      recorded_by: expense.recorded_by,
-      notes: expense.notes,
-      created_at: expense.created_at,
-      updated_at: expense.updated_at,
-    }));
+    const expenseResponses: ExpenseResponse[] = (expenses || [])
+      .map((expense: any) => {
+        const expenseItems: ExpenseItemResponse[] = itemsByExpense[expense.id] || [];
+        const total_amount = expenseItems.reduce((sum, item) => sum + item.amount, 0);
+
+        // If filtering by category_id, only include expenses that have items with that category
+        if (filters.category_id && expenseItems.length === 0) {
+          return null;
+        }
+
+        return {
+          id: expense.id,
+          pocket_id: expense.pocket_id,
+          pocket_name: expense.pocket?.name || 'Unknown',
+          description: expense.description,
+          receipt_url: expense.receipt_url,
+          expense_date: expense.expense_date,
+          status: expense.status as ExpenseStatus,
+          total_amount,
+          items: expenseItems,
+          approved_by: expense.approved_by,
+          recorded_by: expense.recorded_by,
+          notes: expense.notes,
+          created_at: expense.created_at,
+          updated_at: expense.updated_at,
+        };
+      })
+      .filter((e): e is ExpenseResponse => e !== null);
 
     const pagination: Pagination = {
       page,
@@ -91,7 +139,7 @@ export async function getExpenses(
 
     return {
       success: true,
-      data: expenses,
+      data: expenseResponses,
       pagination,
     };
   } catch (error) {
@@ -105,36 +153,60 @@ export async function getExpenses(
  */
 export async function getExpenseById(id: string): Promise<ExpenseResponse> {
   try {
-    const { data, error } = await supabase
+    const { data: expense, error } = await supabase
       .from('expenses')
       .select(`
         *,
-        pocket:pockets(id, name),
-        category:expense_categories(id, name)
+        pocket:pockets(id, name)
       `)
       .eq('id', id)
       .single();
 
-    if (error || !data) {
+    if (error || !expense) {
       throw new NotFoundError('Expense not found');
     }
 
+    // Fetch items for this expense
+    const { data: items, error: itemsError } = await supabase
+      .from('expense_items')
+      .select(`
+        *,
+        category:expense_categories(id, name)
+      `)
+      .eq('expense_id', id);
+
+    if (itemsError) {
+      throw new DatabaseError('Failed to fetch expense items', { error: itemsError.message });
+    }
+
+    const expenseItems: ExpenseItemResponse[] = (items || []).map((item: any) => ({
+      id: item.id,
+      expense_id: item.expense_id,
+      category_id: item.category_id,
+      category_name: item.category?.name || 'Unknown',
+      amount: Number(item.amount),
+      description: item.description,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+    }));
+
+    const total_amount = expenseItems.reduce((sum, item) => sum + item.amount, 0);
+
     return {
-      id: data.id,
-      pocket_id: data.pocket_id,
-      pocket_name: data.pocket?.name || 'Unknown',
-      category_id: data.category_id,
-      category_name: data.category?.name || 'Unknown',
-      description: data.description,
-      amount: Number(data.amount),
-      receipt_url: data.receipt_url,
-      expense_date: data.expense_date,
-      status: data.status as ExpenseStatus,
-      approved_by: data.approved_by,
-      recorded_by: data.recorded_by,
-      notes: data.notes,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
+      id: expense.id,
+      pocket_id: expense.pocket_id,
+      pocket_name: expense.pocket?.name || 'Unknown',
+      description: expense.description,
+      receipt_url: expense.receipt_url,
+      expense_date: expense.expense_date,
+      status: expense.status as ExpenseStatus,
+      total_amount,
+      items: expenseItems,
+      approved_by: expense.approved_by,
+      recorded_by: expense.recorded_by,
+      notes: expense.notes,
+      created_at: expense.created_at,
+      updated_at: expense.updated_at,
     };
   } catch (error) {
     if (error instanceof NotFoundError) throw error;
@@ -143,17 +215,22 @@ export async function getExpenseById(id: string): Promise<ExpenseResponse> {
 }
 
 /**
- * Create a new expense
+ * Create a new expense with line items
  */
 export async function createExpense(
   expenseData: CreateExpenseRequest,
   userId: string
 ): Promise<ExpenseResponse> {
   try {
+    // Validate items array
+    if (!expenseData.items || expenseData.items.length === 0) {
+      throw new ValidationError('At least one expense item is required');
+    }
+
     // Validate pocket exists
     const { data: pocket, error: pocketError } = await supabase
       .from('pockets')
-      .select('id')
+      .select('id, name')
       .eq('id', expenseData.pocket_id)
       .single();
 
@@ -161,52 +238,90 @@ export async function createExpense(
       throw new ValidationError('Invalid pocket ID');
     }
 
-    // Validate category exists
-    const { data: category, error: categoryError } = await supabase
+    // Validate all categories exist
+    const categoryIds = expenseData.items.map(item => item.category_id);
+    const { data: categories, error: categoryError } = await supabase
       .from('expense_categories')
-      .select('id')
-      .eq('id', expenseData.category_id)
-      .single();
+      .select('id, name')
+      .in('id', categoryIds);
 
-    if (categoryError || !category) {
-      throw new ValidationError('Invalid category ID');
+    if (categoryError || !categories || categories.length !== categoryIds.length) {
+      throw new ValidationError('One or more invalid category IDs');
     }
 
-    // Create expense with pending status
-    const { data, error } = await supabase
+    // Create category lookup map
+    const categoryMap = categories.reduce((acc: any, cat: any) => {
+      acc[cat.id] = cat.name;
+      return acc;
+    }, {});
+
+    // Create expense (without category_id and amount)
+    const { data: expense, error: expenseError } = await supabase
       .from('expenses')
       .insert({
-        ...expenseData,
+        pocket_id: expenseData.pocket_id,
+        description: expenseData.description,
+        receipt_url: expenseData.receipt_url,
+        expense_date: expenseData.expense_date,
+        notes: expenseData.notes,
         status: ExpenseStatus.PENDING,
         recorded_by: userId,
       })
-      .select(`
-        *,
-        pocket:pockets(id, name),
-        category:expense_categories(id, name)
-      `)
+      .select()
       .single();
 
-    if (error || !data) {
-      throw new DatabaseError('Failed to create expense', { error: error?.message });
+    if (expenseError || !expense) {
+      throw new DatabaseError('Failed to create expense', { error: expenseError?.message });
     }
 
+    // Create expense items
+    const itemsToInsert = expenseData.items.map(item => ({
+      expense_id: expense.id,
+      category_id: item.category_id,
+      amount: item.amount,
+      description: item.description,
+    }));
+
+    const { data: createdItems, error: itemsError } = await supabase
+      .from('expense_items')
+      .insert(itemsToInsert)
+      .select();
+
+    if (itemsError || !createdItems) {
+      // Rollback: delete the expense
+      await supabase.from('expenses').delete().eq('id', expense.id);
+      throw new DatabaseError('Failed to create expense items', { error: itemsError?.message });
+    }
+
+    // Map items to response format
+    const expenseItems: ExpenseItemResponse[] = createdItems.map((item: any) => ({
+      id: item.id,
+      expense_id: item.expense_id,
+      category_id: item.category_id,
+      category_name: categoryMap[item.category_id] || 'Unknown',
+      amount: Number(item.amount),
+      description: item.description,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+    }));
+
+    const total_amount = expenseItems.reduce((sum, item) => sum + item.amount, 0);
+
     return {
-      id: data.id,
-      pocket_id: data.pocket_id,
-      pocket_name: data.pocket?.name || 'Unknown',
-      category_id: data.category_id,
-      category_name: data.category?.name || 'Unknown',
-      description: data.description,
-      amount: Number(data.amount),
-      receipt_url: data.receipt_url,
-      expense_date: data.expense_date,
-      status: data.status as ExpenseStatus,
-      approved_by: data.approved_by,
-      recorded_by: data.recorded_by,
-      notes: data.notes,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
+      id: expense.id,
+      pocket_id: expense.pocket_id,
+      pocket_name: pocket.name,
+      description: expense.description,
+      receipt_url: expense.receipt_url,
+      expense_date: expense.expense_date,
+      status: expense.status as ExpenseStatus,
+      total_amount,
+      items: expenseItems,
+      approved_by: expense.approved_by,
+      recorded_by: expense.recorded_by,
+      notes: expense.notes,
+      created_at: expense.created_at,
+      updated_at: expense.updated_at,
     };
   } catch (error) {
     if (error instanceof ValidationError || error instanceof DatabaseError) throw error;
@@ -219,8 +334,7 @@ export async function createExpense(
  */
 export async function updateExpense(
   id: string,
-  expenseData: UpdateExpenseRequest,
-  userId: string
+  expenseData: UpdateExpenseRequest
 ): Promise<ExpenseResponse> {
   try {
     // Validate pocket if provided
@@ -236,55 +350,72 @@ export async function updateExpense(
       }
     }
 
-    // Validate category if provided
-    if (expenseData.category_id) {
-      const { data: category, error: categoryError } = await supabase
+    // If items are provided, validate categories
+    if (expenseData.items) {
+      if (expenseData.items.length === 0) {
+        throw new ValidationError('At least one expense item is required');
+      }
+
+      const categoryIds = expenseData.items.map(item => item.category_id);
+      const { data: categories, error: categoryError } = await supabase
         .from('expense_categories')
         .select('id')
-        .eq('id', expenseData.category_id)
-        .single();
+        .in('id', categoryIds);
 
-      if (categoryError || !category) {
-        throw new ValidationError('Invalid category ID');
+      if (categoryError || !categories || categories.length !== categoryIds.length) {
+        throw new ValidationError('One or more invalid category IDs');
       }
     }
 
     // Update expense
-    const { data, error } = await supabase
+    const updatePayload: any = {};
+    if (expenseData.pocket_id) updatePayload.pocket_id = expenseData.pocket_id;
+    if (expenseData.description !== undefined) updatePayload.description = expenseData.description;
+    if (expenseData.receipt_url !== undefined) updatePayload.receipt_url = expenseData.receipt_url;
+    if (expenseData.expense_date) updatePayload.expense_date = expenseData.expense_date;
+    if (expenseData.notes !== undefined) updatePayload.notes = expenseData.notes;
+
+    const { data: expense, error: expenseError } = await supabase
       .from('expenses')
-      .update(expenseData)
+      .update(updatePayload)
       .eq('id', id)
-      .select(`
-        *,
-        pocket:pockets(id, name),
-        category:expense_categories(id, name)
-      `)
+      .select()
       .single();
 
-    if (error || !data) {
-      if (error?.code === 'PGRST116') {
+    if (expenseError || !expense) {
+      if (expenseError?.code === 'PGRST116') {
         throw new NotFoundError('Expense not found');
       }
-      throw new DatabaseError('Failed to update expense', { error: error?.message });
+      throw new DatabaseError('Failed to update expense', { error: expenseError?.message });
     }
 
-    return {
-      id: data.id,
-      pocket_id: data.pocket_id,
-      pocket_name: data.pocket?.name || 'Unknown',
-      category_id: data.category_id,
-      category_name: data.category?.name || 'Unknown',
-      description: data.description,
-      amount: Number(data.amount),
-      receipt_url: data.receipt_url,
-      expense_date: data.expense_date,
-      status: data.status as ExpenseStatus,
-      approved_by: data.approved_by,
-      recorded_by: data.recorded_by,
-      notes: data.notes,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-    };
+    // If items are provided, replace existing items
+    if (expenseData.items) {
+      // Delete existing items
+      await supabase
+        .from('expense_items')
+        .delete()
+        .eq('expense_id', id);
+
+      // Insert new items
+      const itemsToInsert = expenseData.items.map(item => ({
+        expense_id: id,
+        category_id: item.category_id,
+        amount: item.amount,
+        description: item.description,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('expense_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) {
+        throw new DatabaseError('Failed to update expense items', { error: itemsError.message });
+      }
+    }
+
+    // Fetch complete expense with items
+    return getExpenseById(id);
   } catch (error) {
     if (error instanceof ValidationError || error instanceof NotFoundError || error instanceof DatabaseError) {
       throw error;
@@ -294,66 +425,46 @@ export async function updateExpense(
 }
 
 /**
- * Approve or reject an expense (admin only)
+ * Approve or reject an expense
  */
 export async function approveExpense(
   id: string,
-  status: ExpenseStatus,
-  adminId: string
+  adminId: string,
+  status: ExpenseStatus
 ): Promise<ExpenseResponse> {
   try {
-    const updateData: any = {
-      status,
-    };
-
-    // Set approved_by if approving
-    if (status === ExpenseStatus.APPROVED) {
-      updateData.approved_by = adminId;
+    if (status !== ExpenseStatus.APPROVED && status !== ExpenseStatus.REJECTED) {
+      throw new ValidationError('Status must be either approved or rejected');
     }
 
-    const { data, error } = await supabase
+    const { data: expense, error } = await supabase
       .from('expenses')
-      .update(updateData)
+      .update({
+        status,
+        approved_by: adminId,
+      })
       .eq('id', id)
-      .select(`
-        *,
-        pocket:pockets(id, name),
-        category:expense_categories(id, name)
-      `)
+      .select()
       .single();
 
-    if (error || !data) {
+    if (error || !expense) {
       if (error?.code === 'PGRST116') {
         throw new NotFoundError('Expense not found');
       }
       throw new DatabaseError('Failed to approve expense', { error: error?.message });
     }
 
-    return {
-      id: data.id,
-      pocket_id: data.pocket_id,
-      pocket_name: data.pocket?.name || 'Unknown',
-      category_id: data.category_id,
-      category_name: data.category?.name || 'Unknown',
-      description: data.description,
-      amount: Number(data.amount),
-      receipt_url: data.receipt_url,
-      expense_date: data.expense_date,
-      status: data.status as ExpenseStatus,
-      approved_by: data.approved_by,
-      recorded_by: data.recorded_by,
-      notes: data.notes,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-    };
+    return getExpenseById(id);
   } catch (error) {
-    if (error instanceof NotFoundError || error instanceof DatabaseError) throw error;
+    if (error instanceof ValidationError || error instanceof NotFoundError || error instanceof DatabaseError) {
+      throw error;
+    }
     throw new DatabaseError('An error occurred while approving expense');
   }
 }
 
 /**
- * Delete an expense
+ * Delete an expense (items will be cascade deleted)
  */
 export async function deleteExpense(id: string): Promise<void> {
   try {

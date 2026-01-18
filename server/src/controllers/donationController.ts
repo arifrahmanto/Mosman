@@ -66,8 +66,7 @@ export async function updateDonation(
   res: Response
 ): Promise<void> {
   const { id } = req.params as { id: string };
-  const userId = req.user!.id;
-  const donation = await donationService.updateDonation(id, req.body, userId);
+  const donation = await donationService.updateDonation(id, req.body);
   res.json(successResponse(donation, 'Donation updated successfully'));
 }
 

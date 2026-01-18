@@ -1,6 +1,6 @@
 /**
  * Expense Validation Schemas
- * Zod schemas for validating expense-related requests
+ * Zod schemas for validating expense-related requests with line items support
  */
 
 import { z } from 'zod';
@@ -11,16 +11,24 @@ import { z } from 'zod';
 export const expenseStatusSchema = z.enum(['pending', 'approved', 'rejected']);
 
 /**
+ * Expense item schema
+ */
+export const expenseItemSchema = z.object({
+  category_id: z.string().uuid('Category ID must be a valid UUID'),
+  amount: z.number().positive('Amount must be greater than 0'),
+  description: z.string().max(500).optional(),
+});
+
+/**
  * Create expense request schema
  */
 export const createExpenseSchema = z.object({
   pocket_id: z.string().uuid('Pocket ID must be a valid UUID'),
-  category_id: z.string().uuid('Category ID must be a valid UUID'),
   description: z.string().min(1, 'Description is required').max(1000),
-  amount: z.number().positive('Amount must be greater than 0'),
   receipt_url: z.string().url('Receipt URL must be a valid URL').optional(),
   expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
   notes: z.string().max(1000).optional(),
+  items: z.array(expenseItemSchema).min(1, 'At least one item is required'),
 });
 
 /**
@@ -28,12 +36,11 @@ export const createExpenseSchema = z.object({
  */
 export const updateExpenseSchema = z.object({
   pocket_id: z.string().uuid('Pocket ID must be a valid UUID').optional(),
-  category_id: z.string().uuid('Category ID must be a valid UUID').optional(),
   description: z.string().min(1).max(1000).optional(),
-  amount: z.number().positive('Amount must be greater than 0').optional(),
   receipt_url: z.string().url('Receipt URL must be a valid URL').optional(),
   expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
   notes: z.string().max(1000).optional(),
+  items: z.array(expenseItemSchema).min(1, 'At least one item is required').optional(),
 });
 
 /**
@@ -61,3 +68,4 @@ export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
 export type UpdateExpenseInput = z.infer<typeof updateExpenseSchema>;
 export type ApproveExpenseInput = z.infer<typeof approveExpenseSchema>;
 export type ExpenseQueryInput = z.infer<typeof expenseQuerySchema>;
+export type ExpenseItemInput = z.infer<typeof expenseItemSchema>;

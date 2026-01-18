@@ -66,8 +66,7 @@ export async function updateExpense(
   res: Response
 ): Promise<void> {
   const { id } = req.params as { id: string };
-  const userId = req.user!.id;
-  const expense = await expenseService.updateExpense(id, req.body, userId);
+  const expense = await expenseService.updateExpense(id, req.body);
   res.json(successResponse(expense, 'Expense updated successfully'));
 }
 
@@ -83,7 +82,7 @@ export async function approveExpense(
   const { status } = req.body;
   const adminId = req.user!.id;
 
-  const expense = await expenseService.approveExpense(id, status, adminId);
+  const expense = await expenseService.approveExpense(id, adminId, status as ExpenseStatus);
   res.json(successResponse(expense, `Expense ${status} successfully`));
 }
 
