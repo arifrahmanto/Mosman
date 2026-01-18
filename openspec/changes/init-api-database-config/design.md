@@ -56,15 +56,25 @@ mosman/
 │   │   ├── routes/
 │   │   │   ├── index.ts           # Route aggregator
 │   │   │   ├── health.ts          # Health check routes
+│   │   │   ├── auth.ts            # Authentication routes
+│   │   │   ├── users.ts           # User management routes
 │   │   │   ├── donations.ts       # Donation routes
-│   │   │   └── expenses.ts        # Expense routes
+│   │   │   ├── expenses.ts        # Expense routes
+│   │   │   ├── pockets.ts         # Pocket routes
+│   │   │   └── categories.ts      # Category routes
 │   │   ├── controllers/
+│   │   │   ├── authController.ts
+│   │   │   ├── userController.ts
 │   │   │   ├── donationController.ts
 │   │   │   └── expenseController.ts
 │   │   ├── services/
+│   │   │   ├── authService.ts
+│   │   │   ├── userService.ts
 │   │   │   ├── donationService.ts
 │   │   │   └── expenseService.ts
 │   │   ├── validators/
+│   │   │   ├── auth.schema.ts     # Zod schemas for authentication
+│   │   │   ├── user.schema.ts     # Zod schemas for user management
 │   │   │   ├── donation.schema.ts # Zod schemas for donations
 │   │   │   └── expense.schema.ts  # Zod schemas for expenses
 │   │   ├── utils/
@@ -202,6 +212,23 @@ mosman/
 ```
 GET    /api/health                         # Health check
 
+# Authentication
+POST   /api/v1/auth/register               # Register new user
+POST   /api/v1/auth/login                  # Login user
+POST   /api/v1/auth/logout                 # Logout user
+POST   /api/v1/auth/refresh                # Refresh access token
+POST   /api/v1/auth/forgot-password        # Request password reset
+POST   /api/v1/auth/reset-password         # Reset password with token
+PUT    /api/v1/auth/change-password        # Change user password
+GET    /api/v1/auth/me                     # Get current user profile
+PUT    /api/v1/auth/me                     # Update current user profile
+
+# User Management (Admin only)
+GET    /api/v1/users                       # List all users
+GET    /api/v1/users/:id                   # Get user by ID
+PUT    /api/v1/users/:id                   # Update user (role, status)
+DELETE /api/v1/users/:id                   # Deactivate user
+
 # Pockets
 GET    /api/v1/pockets                     # List all pockets with balance
 GET    /api/v1/pockets/:id                 # Get single pocket with details
@@ -221,6 +248,7 @@ GET    /api/v1/expenses                    # List expenses (with pagination, fil
 GET    /api/v1/expenses/:id                # Get expense by ID
 POST   /api/v1/expenses                    # Create expense (requires pocket_id)
 PUT    /api/v1/expenses/:id                # Update expense
+PUT    /api/v1/expenses/:id/approve        # Approve/reject expense (Admin only)
 DELETE /api/v1/expenses/:id                # Delete expense
 
 # Categories
@@ -263,12 +291,51 @@ GET    /api/v1/categories/expenses         # List expense categories
 
 ## Authentication Flow
 
-1. User authenticates via Supabase Auth (email/password or social providers)
-2. Supabase returns JWT access token
-3. Frontend includes token in Authorization header: `Bearer <token>`
-4. Express middleware validates token using Supabase client
-5. Middleware extracts user ID and role from token
-6. Request proceeds if authorized, otherwise returns 401/403
+### Registration Flow
+1. User submits registration form (email, password, full_name)
+2. API validates input data with Zod schema
+3. API calls Supabase Auth `signUp()` to create auth user
+4. API creates user_profile record with default 'viewer' role
+5. API returns success message
+
+### Login Flow
+1. User submits login credentials (email, password)
+2. API calls Supabase Auth `signInWithPassword()`
+3. Supabase validates credentials and returns JWT access token + refresh token
+4. API fetches user_profile from database (includes role, is_active status)
+5. API returns tokens + user profile to frontend
+6. Frontend stores tokens (access token in memory, refresh token securely)
+
+### Authenticated Request Flow
+1. Frontend includes access token in Authorization header: `Bearer <token>`
+2. Express middleware validates token using Supabase client `getUser()`
+3. Middleware extracts user ID from validated token
+4. Middleware queries user_profiles table for role and is_active status
+5. Middleware attaches user info to `req.user` (AuthRequest type)
+6. Authorization middleware checks if user role is allowed
+7. Request proceeds if authorized, otherwise returns 401/403
+
+### Token Refresh Flow
+1. Frontend detects access token expiration
+2. Frontend sends refresh token to `/api/v1/auth/refresh`
+3. API calls Supabase Auth `refreshSession()`
+4. Supabase validates refresh token and returns new access token
+5. API returns new tokens to frontend
+
+### Password Reset Flow
+1. User requests password reset with email at `/api/v1/auth/forgot-password`
+2. API calls Supabase Auth `resetPasswordForEmail()`
+3. Supabase sends reset email with magic link
+4. User clicks link and submits new password at `/api/v1/auth/reset-password`
+5. API calls Supabase Auth `updateUser()` to set new password
+6. API returns success message
+
+### Logout Flow
+1. User clicks logout
+2. Frontend calls `/api/v1/auth/logout`
+3. API calls Supabase Auth `signOut()`
+4. Frontend clears stored tokens
+5. User redirected to login page
 
 ## Security Considerations
 
@@ -412,6 +479,8 @@ export interface UserProfile {
   role: UserRole
   phone: string | null
   is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface AuthUser {
@@ -423,6 +492,31 @@ export interface AuthUser {
 
 export interface AuthRequest extends Request {
   user?: AuthUser
+}
+
+export interface RegisterRequest {
+  email: string
+  password: string
+  full_name: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface AuthResponse {
+  user: AuthUser
+  session: {
+    access_token: string
+    refresh_token: string
+    expires_at: number
+  }
+}
+
+export interface UpdateProfileRequest {
+  full_name?: string
+  phone?: string
 }
 ```
 

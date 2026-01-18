@@ -307,6 +307,8 @@ const options: swaggerJsdoc.Options = {
     },
     tags: [
       { name: 'Health', description: 'Health check endpoints' },
+      { name: 'Authentication', description: 'User authentication and profile management' },
+      { name: 'User Management', description: 'User management (Admin only)' },
       { name: 'Donations', description: 'Donation management' },
       { name: 'Expenses', description: 'Expense management' },
       { name: 'Pockets', description: 'Financial pocket management' },

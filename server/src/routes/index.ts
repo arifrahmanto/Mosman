@@ -6,6 +6,8 @@
 import { Router, Request, Response } from 'express';
 import swaggerUi from 'swagger-ui-express';
 import healthRoutes from './health';
+import authRoutes from './auth';
+import userRoutes from './users';
 import donationRoutes from './donations';
 import expenseRoutes from './expenses';
 import categoryRoutes from './categories';
@@ -63,6 +65,8 @@ router.get('/v1', (req: Request, res: Response) => {
     message: 'Welcome to Mosman API',
     version: 'v1',
     endpoints: {
+      auth: '/api/v1/auth',
+      users: '/api/v1/users',
       donations: '/api/v1/donations',
       expenses: '/api/v1/expenses',
       pockets: '/api/v1/pockets',
@@ -73,6 +77,8 @@ router.get('/v1', (req: Request, res: Response) => {
 });
 
 // Mount API v1 routes (authentication handled in individual routes)
+router.use('/v1/auth', authRoutes);
+router.use('/v1/users', userRoutes);
 router.use('/v1/donations', donationRoutes);
 router.use('/v1/expenses', expenseRoutes);
 router.use('/v1/categories', categoryRoutes);
