@@ -22,9 +22,43 @@ const router = Router();
 router.use(authenticate);
 
 /**
- * GET /api/v1/expenses
- * List expenses with optional filters
- * Access: All authenticated users
+ * @openapi
+ * /v1/expenses:
+ *   get:
+ *     summary: List Expenses
+ *     description: Get a paginated list of expenses with optional filters
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/pocketId'
+ *       - $ref: '#/components/parameters/categoryId'
+ *       - name: status
+ *         in: query
+ *         description: Filter by approval status
+ *         schema:
+ *           type: string
+ *           enum: [pending, approved, rejected]
+ *       - $ref: '#/components/parameters/startDate'
+ *       - $ref: '#/components/parameters/endDate'
+ *       - $ref: '#/components/parameters/page'
+ *       - $ref: '#/components/parameters/pageSize'
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Expense'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get(
   '/',
@@ -33,9 +67,32 @@ router.get(
 );
 
 /**
- * GET /api/v1/expenses/:id
- * Get a single expense by ID
- * Access: All authenticated users
+ * @openapi
+ * /v1/expenses/{id}:
+ *   get:
+ *     summary: Get Expense by ID
+ *     description: Retrieve a single expense by its ID
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/idParam'
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Expense'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
 router.get(
   '/:id',
@@ -44,9 +101,45 @@ router.get(
 );
 
 /**
- * POST /api/v1/expenses
- * Create a new expense
- * Access: Admin and Treasurer only
+ * @openapi
+ * /v1/expenses:
+ *   post:
+ *     summary: Create Expense
+ *     description: Create a new expense record (Admin and Treasurer only). Status defaults to 'pending'
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateExpense'
+ *           example:
+ *             pocket_id: "11111111-1111-1111-1111-111111111111"
+ *             category_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+ *             description: "Pembelian sound system untuk masjid"
+ *             amount: 5000000
+ *             expense_date: "2026-01-18"
+ *             notes: "Untuk keperluan kajian rutin"
+ *     responses:
+ *       201:
+ *         description: Expense created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Expense'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
  */
 router.post(
   '/',
@@ -56,9 +149,65 @@ router.post(
 );
 
 /**
- * PUT /api/v1/expenses/:id
- * Update an existing expense
- * Access: Admin and Treasurer only
+ * @openapi
+ * /v1/expenses/{id}:
+ *   put:
+ *     summary: Update Expense
+ *     description: Update an existing expense record (Admin and Treasurer only)
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/idParam'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               pocket_id:
+ *                 type: string
+ *                 format: uuid
+ *               category_id:
+ *                 type: string
+ *                 format: uuid
+ *               description:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *                 minimum: 0.01
+ *               receipt_url:
+ *                 type: string
+ *                 format: uri
+ *               expense_date:
+ *                 type: string
+ *                 format: date
+ *               notes:
+ *                 type: string
+ *           example:
+ *             description: "Updated description"
+ *             amount: 5500000
+ *     responses:
+ *       200:
+ *         description: Expense updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Expense'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
 router.put(
   '/:id',
@@ -69,9 +218,50 @@ router.put(
 );
 
 /**
- * PUT /api/v1/expenses/:id/approve
- * Approve or reject an expense
- * Access: Admin only
+ * @openapi
+ * /v1/expenses/{id}/approve:
+ *   put:
+ *     summary: Approve or Reject Expense
+ *     description: Change expense status to approved or rejected (Admin only)
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/idParam'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [approved, rejected]
+ *                 description: New approval status
+ *           example:
+ *             status: "approved"
+ *     responses:
+ *       200:
+ *         description: Expense status updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Expense'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
 router.put(
   '/:id/approve',
@@ -82,9 +272,39 @@ router.put(
 );
 
 /**
- * DELETE /api/v1/expenses/:id
- * Delete an expense
- * Access: Admin only
+ * @openapi
+ * /v1/expenses/{id}:
+ *   delete:
+ *     summary: Delete Expense
+ *     description: Delete an expense record (Admin only)
+ *     tags: [Expenses]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/idParam'
+ *     responses:
+ *       200:
+ *         description: Expense deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   nullable: true
+ *                 message:
+ *                   type: string
+ *                   example: Expense deleted successfully
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
 router.delete(
   '/:id',

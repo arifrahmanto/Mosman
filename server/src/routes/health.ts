@@ -25,8 +25,45 @@ interface HealthResponse {
 }
 
 /**
- * GET /api/health
- * Health check endpoint
+ * @openapi
+ * /health:
+ *   get:
+ *     summary: Health Check
+ *     description: Check server and database health status
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Server is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [healthy, degraded, unhealthy]
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *                     version:
+ *                       type: string
+ *                     environment:
+ *                       type: string
+ *                     database:
+ *                       type: object
+ *                       properties:
+ *                         connected:
+ *                           type: boolean
+ *                         message:
+ *                           type: string
+ *       503:
+ *         description: Server is degraded or unhealthy
  */
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {

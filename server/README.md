@@ -10,6 +10,7 @@ Backend API server for mosque financial management system built with TypeScript,
 - **Authentication**: JWT-based auth with role-based access control
 - **Validation**: Runtime validation using Zod schemas
 - **Security**: Helmet, CORS, rate limiting, and RLS policies
+- **API Documentation**: Interactive Swagger/OpenAPI documentation
 
 ## Prerequisites
 
@@ -87,6 +88,25 @@ npm run dev
 
 The server will run on `http://localhost:3000` with auto-reload enabled.
 
+### API Documentation
+
+Interactive API documentation is available via Swagger UI:
+
+**URL**: `http://localhost:3000/api/docs`
+
+The Swagger UI provides:
+- 📖 Complete API endpoint documentation
+- 🧪 Interactive API testing (try it out)
+- 📝 Request/response schemas
+- 🔐 Authentication support (add your Bearer token)
+- 📋 Request examples
+
+**Quick Start with Swagger:**
+1. Start the server: `npm run dev`
+2. Open browser: `http://localhost:3000/api/docs`
+3. Click "Authorize" and enter your JWT token
+4. Try out any endpoint by clicking "Try it out"
+
 ## Scripts
 
 - `npm run dev` - Start development server with auto-reload
@@ -95,6 +115,11 @@ The server will run on `http://localhost:3000` with auto-reload enabled.
 - `npm run type-check` - Check TypeScript types without emitting files
 
 ## API Endpoints
+
+### Documentation
+
+- `GET /api/docs` - **Interactive Swagger UI Documentation** 📚
+- `GET /api/v1` - API information and endpoints list
 
 ### Health Check
 

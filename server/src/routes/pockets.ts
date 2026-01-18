@@ -21,9 +21,30 @@ const router = Router();
 router.use(authenticate);
 
 /**
- * GET /api/v1/pockets
- * Get all pockets with current balance
- * Access: All authenticated users
+ * @openapi
+ * /v1/pockets:
+ *   get:
+ *     summary: List All Pockets
+ *     description: Get a list of all active financial pockets with their current balances
+ *     tags: [Pockets]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Pocket'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -50,9 +71,32 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * GET /api/v1/pockets/:id
- * Get a single pocket with details
- * Access: All authenticated users
+ * @openapi
+ * /v1/pockets/{id}:
+ *   get:
+ *     summary: Get Pocket by ID
+ *     description: Retrieve a single pocket with its details and current balance
+ *     tags: [Pockets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/idParam'
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Pocket'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
 router.get(
   '/:id',
@@ -85,9 +129,44 @@ router.get(
 );
 
 /**
- * GET /api/v1/pockets/:id/summary
- * Get pocket summary with calculated balance
- * Access: All authenticated users
+ * @openapi
+ * /v1/pockets/{id}/summary:
+ *   get:
+ *     summary: Get Pocket Summary
+ *     description: Get detailed financial summary for a pocket including total donations, expenses, and calculated balance
+ *     tags: [Pockets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/idParam'
+ *     responses:
+ *       200:
+ *         description: Successful response with financial summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/PocketSummary'
+ *             example:
+ *               success: true
+ *               data:
+ *                 id: "11111111-1111-1111-1111-111111111111"
+ *                 name: "Kas Umum"
+ *                 description: "Kas untuk operasional dan kegiatan umum masjid"
+ *                 total_donations: 10000000
+ *                 total_expenses: 3500000
+ *                 balance: 6500000
+ *                 donation_count: 25
+ *                 expense_count: 12
+ *                 is_active: true
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
 router.get(
   '/:id/summary',
@@ -154,9 +233,40 @@ router.get(
 );
 
 /**
- * GET /api/v1/pockets/:pocketId/donations
- * Get all donations for a specific pocket
- * Access: All authenticated users
+ * @openapi
+ * /v1/pockets/{pocketId}/donations:
+ *   get:
+ *     summary: Get Donations by Pocket
+ *     description: Get a paginated list of all donations for a specific pocket
+ *     tags: [Pockets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: pocketId
+ *         in: path
+ *         required: true
+ *         description: Pocket ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - $ref: '#/components/parameters/page'
+ *       - $ref: '#/components/parameters/pageSize'
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Donation'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get(
   '/:pocketId/donations',
@@ -172,9 +282,40 @@ router.get(
 );
 
 /**
- * GET /api/v1/pockets/:pocketId/expenses
- * Get all expenses for a specific pocket
- * Access: All authenticated users
+ * @openapi
+ * /v1/pockets/{pocketId}/expenses:
+ *   get:
+ *     summary: Get Expenses by Pocket
+ *     description: Get a paginated list of all expenses for a specific pocket
+ *     tags: [Pockets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: pocketId
+ *         in: path
+ *         required: true
+ *         description: Pocket ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - $ref: '#/components/parameters/page'
+ *       - $ref: '#/components/parameters/pageSize'
+ *     responses:
+ *       200:
+ *         description: Successful response
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Expense'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get(
   '/:pocketId/expenses',
